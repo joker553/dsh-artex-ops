@@ -281,6 +281,17 @@ pt_nuclei action=ingest file=nuclei.jsonl          # 或 action=map 先预览
 5. `pt_biz action=test state=violated|holds|inconclusive evidence=...`——**violated 必须有回显**。
 
 约束：`pt_next` 会把未验证的不变量推到决策里；`violated` 会自动把对应矩阵格子标 tested，所以不要为了刷覆盖乱判 violated，否则等于自己伪造证据。
+## 3.13 资产发现：静态 / sourcemap / HAR
+
+```bash
+pt_recon action=save url=https://target/     # 页面 + 同源 bundle + 动态 chunk + sourcemap 源码
+pt_recon action=import file=target.har       # 浏览器导出 HAR：登录后的全量请求
+```
+
+- 递归：跟 `import('...')` 与 `*.js` 字面量（`depth` 默认 2、`maxScripts` 默认 40）；
+- sourcemap：命中 `sourceMappingURL` 就拉 `.map`，把 `sourcesContent` 当源码再挖一遍；
+- HAR：path 去重 + method 归并 + query/body 字段变参数 + 鉴权头记 hint；
+- 都不执行 JS：真运行时（XHR、WS、GraphQL）只能靠浏览器 + HAR 补。
 ## 4. 串行链：用断言钉住依赖
 
 真攻击链有前后依赖，别并行下发：

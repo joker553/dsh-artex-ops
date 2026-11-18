@@ -241,6 +241,28 @@ pt_biz action=test id=inv-4 state=violated evidence="POST price=0.01 → charged
 - `mutate` 生成 21 类变体：金额 0/负数/极小/极大/浮点噪声/字符串/科学计数、数量、重复参数、数组化、换方法、并发重放、状态后重放。
 
 行业清单是**起点**：真正值钱的规则在目标自己的定价页、会员条款、结算流程里——把它们抄进 `notes`/`invariant` 才是把"业务知识"灌进来的正确方式。
+## 资产发现：三种输入
+
+```bash
+# 1) 静态：页面 + 同源 bundle + 动态 chunk + sourcemap 源码
+pt_recon action=save url=https://target/            # depth 默认 2，sourcemaps 默认 true
+pt_recon action=scan  url=https://target/ depth=3   # 只看结果不落库
+
+# 2) 运行时：浏览器 DevTools → Network → 右键 Save all as HAR
+pt_recon action=import file=./target.har
+
+# 3) 外部工具结果：ffuf / subfinder 输出逐条登记
+pt_asset action=add assets=[{"type":"endpoint","name":"/api/v2/x","host":"target"}]
+```
+
+| 能力 | 说明 |
+|---|---|
+| 动态 chunk | 跟 `import('...')` 与 `*.js` 字面量，广度优先、按 `depth` 限层，脚本上限 `maxScripts`（默认 40） |
+| sourcemap | 命中 `//# sourceMappingURL=` 就下载 `.map`，把 `sourcesContent` 当源码再跑一遍提取器（有 sourcemap 的站等于白送路由表） |
+| HAR | 一条命令把登录后的全量请求转成资产：path 去重、method 归并、query 与 **JSON/form body 字段都变参数**、`Authorization/x-api-key/cookie` 记为线索、4xx/5xx 记 hint |
+| 幂等 | 同一 URL 重复采集是 merge，不重复登记；recon 类目自动置 tested |
+
+**限制**（写清楚免得误判）：不执行 JS（运行时必须靠浏览器/HAR）；只抓同源；GraphQL operation 名、WebSocket 帧、表单字段（`<input name>`）尚未抽取。
 ## 扫描器桥接（nuclei → 类型矩阵）
 
 ```bash
@@ -284,7 +306,7 @@ pt_mission prove evidence="…" && pt_mission report
 ## 自测
 
 ```bash
-node test/selftest.mjs        # 107 项：schema 校验、真实回连、链断言拒绝、意图生命周期、prove 门槛、CLI、MCP 握手、多 worker 过程交换、阶段机
+node test/selftest.mjs        # 111 项：schema 校验、真实回连、链断言拒绝、意图生命周期、prove 门槛、CLI、MCP 握手、多 worker 过程交换、阶段机
 node test/install-check.mjs   # 安装位：patch/manifest/解析/apply 25 工具 + CLI 从安装目录可执行
 node test/hot-reload.mjs      # 宿主外壳：catalog 注册、调用往返、lib 改动后重启子进程并重注册
 node test/hot-reload-stability.mjs  # 连续改动 lib/：始终只剩 1 个实现子进程、卸载后无孤儿

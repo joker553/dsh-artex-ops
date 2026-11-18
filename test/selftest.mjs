@@ -1177,6 +1177,82 @@ async function main() {
     } catch {}
   }
 
+  console.log('\n[23] 递归 chunk + sourcemap + HAR 导入')
+  const rdir = makeDataDir()
+  const recon = createEngine({ dataDir: rdir })
+  const spaServer = http.createServer((req, res) => {
+    const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+    if (url.pathname === '/') {
+      res.writeHead(200, { 'content-type': 'text/html' })
+      res.end('<!doctype html><title>chunk lab</title><script src="/main.js"></script>')
+      return
+    }
+    if (url.pathname === '/main.js') {
+      res.writeHead(200, { 'content-type': 'application/javascript' })
+      res.end("fetch('/api/v1/main');\nimport('/chunk-a.js').then(m => m.run());\n//# sourceMappingURL=/main.js.map\n")
+      return
+    }
+    if (url.pathname === '/chunk-a.js') {
+      res.writeHead(200, { 'content-type': 'application/javascript' })
+      res.end("export const run = () => fetch('/api/v2/hidden');\n")
+      return
+    }
+    if (url.pathname === '/main.js.map') {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ version: 3, sources: ['src/deep.ts'], sourcesContent: ["export const deep = () => fetch('/api/v3/frommap');"] }))
+      return
+    }
+    res.writeHead(404)
+    res.end('nope')
+  })
+  const rport = await new Promise((resolve) => spaServer.listen(0, '127.0.0.1', () => resolve(spaServer.address().port)))
+  try {
+    const base = `http://127.0.0.1:${rport}`
+    const scan = await recon.call('pt_recon', { action: 'scan', url: `${base}/` })
+    const paths = scan.endpoints.map((row) => row.path)
+    assert.ok(paths.includes('/api/v1/main'), `main bundle endpoint missing: ${paths.join(',')}`)
+    assert.ok(paths.includes('/api/v2/hidden'), 'dynamic chunk endpoint must be discovered')
+    assert.ok(paths.includes('/api/v3/frommap'), 'sourcemap sourcesContent endpoint must be discovered')
+    assert.equal(scan.scripts.length, 2, `main + 1 chunk expected, got ${scan.scripts.length}`)
+    ok('递归抓动态 chunk（import()）', paths.filter((p) => p.startsWith('/api/')).join(', '))
+    ok('解析 sourcemap sourcesContent 里的接口', paths.includes('/api/v3/frommap') ? '/api/v3/frommap' : 'missing')
+
+    const saved = await recon.call('pt_recon', { action: 'save', url: `${base}/` })
+    assert.ok(saved.saved.endpoints >= 3)
+    ok('save 落资产并标 recon 格', `${saved.saved.endpoints} 个 endpoint`)
+
+    const har = {
+      log: {
+        entries: [
+          {
+            request: { method: 'POST', url: `${base}/api/v2/orders`, queryString: [], headers: [{ name: 'Authorization', value: 'Bearer lab-token' }], postData: { text: JSON.stringify({ price: 199, coupon: 'LAB50' }) } },
+            response: { status: 200 },
+          },
+          {
+            request: { method: 'GET', url: `${base}/api/v2/admin/users?page=1&size=20`, queryString: [{ name: 'page', value: '1' }, { name: 'size', value: '20' }], headers: [] },
+            response: { status: 200 },
+          },
+        ],
+      },
+    }
+    const imported = await recon.call('pt_recon', { action: 'import', har: JSON.stringify(har) })
+    const importedPaths = imported.endpoints.map((row) => row.path)
+    assert.ok(importedPaths.includes('/api/v2/orders') && importedPaths.includes('/api/v2/admin/users'))
+    const orderRow = imported.endpoints.find((row) => row.path === '/api/v2/orders')
+    assert.deepEqual(orderRow.methods, ['POST'])
+    const paramNames = imported.params.map((param) => param.name)
+    assert.ok(paramNames.includes('price') && paramNames.includes('coupon'), `body params missing: ${paramNames.join(',')}`)
+    assert.ok(paramNames.includes('page') && paramNames.includes('size'))
+    assert.ok(imported.hints.some((hint) => hint.includes('authorization')))
+    ok('HAR 导入：方法/query/body 参数/鉴权头线索', `${importedPaths.length} 个 endpoint`)
+  } finally {
+    await recon.close()
+    await new Promise((resolve) => spaServer.close(resolve))
+    try {
+      fs.rmSync(rdir, { recursive: true, force: true })
+    } catch {}
+  }
+
   console.log(`\nPASS  ${results.length} 项检查全部通过 · dataDir=${dataDir}`)
   // Cleanup: dispose effects (closes the listener) and drop the temp data dir.
   for (const dispose of ctx.__effects ?? []) {
