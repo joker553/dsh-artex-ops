@@ -1,0 +1,10 @@
+node_modules/
+data/
+*.log
+state.json
+state.json.*
+secrets/
+evidence/
+oob/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,10 @@
+# Bundle patch layer for dsh-artex-ops.
+# Loads this package's main entry as a host-side Cordis plugin (ctx.tools tools +
+# an optional system-prompt playbook section). No client half, no prompt overlay:
+# the plugin only adds its own tool surface and one prompt section referenced by
+# its own name.
+- insert:
+    - id: dsh-artex-ops
+      name: dsh-artex-ops
+      config:
+        enabled: true
