@@ -232,7 +232,9 @@ pt_nuclei action=ingest file=nuclei.jsonl          # 落库：命中格子标 te
 - **CVE 类**没有稳定的类型归属 → 只生成 candidate，不污染矩阵；
 - **幂等**：同一 (host, template) 不会重复生成候选，已 tested 的格子不重复计；
 - 命中的格子 note 里会写 `nuclei <template-id> (<severity>) @ <matched-at>`，报告可直接引用；
-- candidate 仍需独立复验才升 finding（`pt_candidate verdict=confirmed` 要证据）。
+- candidate 仍需独立复验才升 finding（`pt_candidate verdict=confirmed` 要证据）；
+- **聚合**：同一 `(host, CVE)` 或 `(host, template)` 只留一条候选，标题带 `(+N 处)`，避免全量模板库把候选队列淹没；
+- 全量跑完想清场：`pt_mission action=clean`（默认清 `work/`，`includeEvidence: true` 连证据一起清并同步索引）。
 
 ## 本地靶场演练（5 分钟）
 
@@ -259,7 +261,7 @@ pt_mission prove evidence="…" && pt_mission report
 ## 自测
 
 ```bash
-node test/selftest.mjs        # 95 项：schema 校验、真实回连、链断言拒绝、意图生命周期、prove 门槛、CLI、MCP 握手、多 worker 过程交换、阶段机
+node test/selftest.mjs        # 99 项：schema 校验、真实回连、链断言拒绝、意图生命周期、prove 门槛、CLI、MCP 握手、多 worker 过程交换、阶段机
 node test/install-check.mjs   # 安装位：patch/manifest/解析/apply 25 工具 + CLI 从安装目录可执行
 node test/hot-reload.mjs      # 宿主外壳：catalog 注册、调用往返、lib 改动后重启子进程并重注册
 ```

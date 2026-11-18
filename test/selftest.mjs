@@ -1055,6 +1055,58 @@ async function main() {
     } catch {}
   }
 
+  console.log('\n[21] 候选聚合 + 工作目录清理')
+  const adir = makeDataDir()
+  const ag = createEngine({ dataDir: adir })
+  try {
+    await ag.call('pt_mission', { action: 'start', goal: '聚合与清理', scope: ['127.0.0.1:18200'] })
+    await ag.call('pt_asset', { action: 'add', assets: [{ type: 'app', name: 'http://127.0.0.1:18200', host: '127.0.0.1:18200' }] })
+
+    // 同一个 CVE 在 3 个路径上各报一次 + 另一个模板在另一台主机上
+    const rows = [
+      ['CVE-2021-41773', 'critical', ['cve', 'apache'], 'http://127.0.0.1:18200/a', 'Apache Path Traversal'],
+      ['CVE-2021-41773', 'critical', ['cve', 'apache'], 'http://127.0.0.1:18200/b', 'Apache Path Traversal'],
+      ['CVE-2021-41773', 'critical', ['cve', 'apache'], 'http://127.0.0.1:18200/c', 'Apache Path Traversal'],
+      ['sqli-error-based', 'high', ['sqli'], 'http://127.0.0.1:18201/api?q=1', 'Error Based SQL Injection'],
+    ].map(([id, severity, tags, url, name]) =>
+      JSON.stringify({ 'template-id': id, info: { name, severity, tags, classification: id.startsWith('CVE') ? { 'cve-id': [id] } : {} }, host: new URL(url).host, 'matched-at': url }),
+    )
+    const ingest = await ag.call('pt_nuclei', { action: 'ingest', json: rows.join('\n') })
+    assert.equal(ingest.total, 4)
+    assert.equal(ingest.aggregatedGroups, 2, `expected 2 groups, got ${ingest.aggregatedGroups}`)
+    assert.equal(ingest.candidates, 2, 'aggregated candidates, not one per path')
+    ok('同一 CVE 多路径聚合为 1 条候选', `4 条命中 → ${ingest.aggregatedGroups} 组 / ${ingest.candidates} 候选`)
+
+    const list = await ag.call('pt_candidate', { action: 'list', limit: 10 })
+    const cve = list.candidates.find((row) => row.ref === 'CVE-2021-41773')
+    assert.ok(cve, 'candidate should be keyed by CVE')
+    assert.match(cve.title, /\+2 处/, `title should mention extra matches, got ${cve.title}`)
+    ok('候选标题带命中处数', cve.title)
+
+    // 工作目录清理：默认只清 work/，evidence 保留；显式指定才清 evidence/artifacts
+    const ws = (await ag.call('pt_mission', { action: 'workspace' })).workspace
+    fs.writeFileSync(path.join(ws.work, 'scratch.txt'), 'mid artifact')
+    await ag.call('pt_evidence_save', { name: 'keep-me', content: 'GET / -> 200' })
+    const cleaned = await ag.call('pt_mission', { action: 'clean' })
+    assert.equal(cleaned.removed.work, 1)
+    assert.equal(cleaned.removed.evidence, 0)
+    assert.equal(cleaned.removed.artifacts, 0)
+    assert.equal(cleaned.remaining.evidenceFiles.length, 1, 'evidence must survive a default clean')
+    ok('clean 默认只清 work/，证据保留', `removed work=${cleaned.removed.work}`)
+
+    const before = (await ag.call('pt_state', {})).counts.evidence
+    const deep = await ag.call('pt_mission', { action: 'clean', includeEvidence: true, includeArtifacts: true })
+    assert.equal(deep.remaining.evidenceFiles.length, 0)
+    const after = (await ag.call('pt_state', {})).counts.evidence
+    assert.equal(after, before - deep.removed.evidence, 'state index must drop deleted evidence rows')
+    ok('includeEvidence 会清证据并同步索引', `${before} → ${after}`)
+  } finally {
+    await ag.close()
+    try {
+      fs.rmSync(adir, { recursive: true, force: true })
+    } catch {}
+  }
+
   console.log(`\nPASS  ${results.length} 项检查全部通过 · dataDir=${dataDir}`)
   // Cleanup: dispose effects (closes the listener) and drop the temp data dir.
   for (const dispose of ctx.__effects ?? []) {
