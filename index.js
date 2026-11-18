@@ -93,7 +93,9 @@ class Rpc {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
-        reject(new Error(`artex-ops impl timeout after ${timeoutMs}ms (${op})`))
+        // 超时通常意味着实现子进程卡死或已经变成孤儿：主动回收，下一次调用会重新拉起。
+        void this.stop().catch(() => {})
+        reject(new Error(`artex-ops impl timeout after ${timeoutMs}ms (${op}); impl 已被回收，下次调用会自动重启`))
       }, timeoutMs)
       this.pending.set(id, {
         resolve: (value) => {
@@ -118,22 +120,40 @@ class Rpc {
   async stop() {
     const child = this.child
     this.child = null
-    if (!child) return
+    if (!child) return { stopped: true, forced: false }
+    // 先把挂起的请求全部失败掉，避免它们等到超时才返回
+    for (const [, entry] of this.pending) entry.reject(new Error('artex-ops impl stopping (reload)'))
+    this.pending.clear()
     try {
       child.stdin.write(`${JSON.stringify({ id: ++this.seq, op: 'shutdown' })}\n`)
     } catch {}
-    await new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        try {
-          child.kill()
-        } catch {}
-        resolve()
-      }, 800)
-      child.once('exit', () => {
-        clearTimeout(timer)
-        resolve()
+    const waitExit = (ms) =>
+      new Promise((resolve) => {
+        if (child.exitCode !== null || child.signalCode !== null) return resolve(true)
+        const timer = setTimeout(() => {
+          child.removeListener('exit', onExit)
+          resolve(false)
+        }, ms)
+        const onExit = () => {
+          clearTimeout(timer)
+          resolve(true)
+        }
+        child.once('exit', onExit)
       })
-    })
+    if (await waitExit(1000)) return { stopped: true, forced: false }
+    // 优雅退出失败：强杀（Windows 上 kill('SIGKILL') 等价 TerminateProcess）
+    try {
+      child.kill('SIGKILL')
+    } catch {}
+    if (await waitExit(500)) return { stopped: true, forced: true }
+    // 仍不死：用 taskkill 连树杀，最后记录一条错误（宿主下次调用会重新拉起）
+    try {
+      const { spawnSync } = await import('node:child_process')
+      spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true })
+    } catch {}
+    const final = await waitExit(500)
+    this.log(`impl pid ${child.pid} ${final ? 'killed by taskkill' : 'STILL ALIVE after force kill'}`)
+    return { stopped: final, forced: true }
   }
 
   close() {
@@ -236,14 +256,21 @@ export function apply(ctx, config = {}) {
   // lib/ 变动 → 重启实现子进程 → 差量重注册。这就是"不再需要重启 DeepSeekRuntime"。
   let timer = null
   let reloads = 0
+  // 串行化：fs.watch 一次改动可能触发多个事件，并发 reload 会留下多个子进程。
+  let reloadChain = Promise.resolve()
   const reload = () => {
-    reloads += 1
-    void (async () => {
-      log(`lib changed, reloading impl (#${reloads})`)
-      await rpc.stop()
-      rpc.start()
-      await sync(`reload#${reloads}`)
-    })().catch((error) => log(`reload failed: ${error?.message ?? error}`))
+    reloadChain = reloadChain
+      .then(async () => {
+        reloads += 1
+        log(`lib changed, reloading impl (#${reloads})`)
+        const stopped = await rpc.stop()
+        rpc.start()
+        const catalog = await rpc.request('catalog', {}, 20000)
+        log(`impl #${reloads} up: pid=${rpc.child?.pid ?? '?'} tools=${catalog.tools?.length ?? 0}${stopped.forced ? ' (previous child force-killed)' : ''}`)
+        await sync(`reload#${reloads}`)
+      })
+      .catch((error) => log(`reload failed: ${error?.message ?? error}`))
+    return reloadChain
   }
   let watcher = null
   try {

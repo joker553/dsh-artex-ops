@@ -18,7 +18,9 @@ cd dsh-artex-ops
 node install.mjs                 # 自动探测 DSH home / profile，装包 + 挂 bundles + 写 patch + 装技能
 ```
 
-改完 `lib/` 不用重启 DeepSeekRuntime：宿主外壳会重启实现子进程并按 catalog 差量重注册工具。
+改完 lib/ 不用重启 DeepSeekRuntime：宿主外壳会重启实现子进程并按 catalog 差量重注册工具。
+
+重载是**串行**的（连续保存不会并发 spawn），旧进程先优雅退出、1s 内不退就强杀（Windows 再兜底 taskkill /T /F），超时的调用会主动回收实现并提示下次调用自动重启——	est/hot-reload-stability.mjs 专门回归这一点。
 ## 三种用法（同一引擎）
 
 | 形态 | 入口 | 适用 |
@@ -266,6 +268,7 @@ pt_mission prove evidence="…" && pt_mission report
 node test/selftest.mjs        # 99 项：schema 校验、真实回连、链断言拒绝、意图生命周期、prove 门槛、CLI、MCP 握手、多 worker 过程交换、阶段机
 node test/install-check.mjs   # 安装位：patch/manifest/解析/apply 25 工具 + CLI 从安装目录可执行
 node test/hot-reload.mjs      # 宿主外壳：catalog 注册、调用往返、lib 改动后重启子进程并重注册
+node test/hot-reload-stability.mjs  # 连续改动 lib/：始终只剩 1 个实现子进程、卸载后无孤儿
 ```
 
 ## 边界

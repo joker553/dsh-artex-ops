@@ -1,7 +1,7 @@
 {
   "name": "dsh-artex-ops",
-  "version": "2.3.0",
-  "description": "对话式 ARTEX 渗透编排层：mission/意图队列/pt_next 决策 + 双图（资产/探索）+ 攻击链断言状态机 + OAST 带外验证 + 凭据库 + 防护画像 + 候选与已确认漏洞 + 证据固化 + worker 间过程级交换 + 子 agent 当 worker（作业说明/僵尸回收）+ 跨进程写锁 + 双图（资产包含边/探索血缘/锚点/覆盖度）+ hint 节点（人说的话）+ 多目标逐个 prove + 漏洞类型覆盖矩阵（64 类）+ mission.prove 的覆盖闸门 / 批量兜底（cat=all、skipResolved）+ 静态资产发现（pt_recon）+ 宿主外壳/实现子进程热重载 + 阶段状态机与分阶段 worker 合同 + 每次 mission 独立工作目录（work/ evidence/ report.md manifest.json）+ nuclei 结果桥接（模板→类目→格子/candidate）+ 候选按 CVE/host 聚合 + 工作目录清理。同时是 DSH 插件、独立 CLI 和 MCP server，纯 Node 内置模块实现。",
+  "version": "2.3.1",
+  "description": "对话式 ARTEX 渗透编排层：mission/意图队列/pt_next 决策 + 双图（资产/探索）+ 攻击链断言状态机 + OAST 带外验证 + 凭据库 + 防护画像 + 候选与已确认漏洞 + 证据固化 + worker 间过程级交换 + 子 agent 当 worker（作业说明/僵尸回收）+ 跨进程写锁 + 双图（资产包含边/探索血缘/锚点/覆盖度）+ hint 节点（人说的话）+ 多目标逐个 prove + 漏洞类型覆盖矩阵（64 类）+ mission.prove 的覆盖闸门 / 批量兜底（cat=all、skipResolved）+ 静态资产发现（pt_recon）+ 宿主外壳/实现子进程热重载 + 阶段状态机与分阶段 worker 合同 + 每次 mission 独立工作目录（work/ evidence/ report.md manifest.json）+ nuclei 结果桥接（模板→类目→格子/candidate）+ 候选按 CVE/host 聚合 + 工作目录清理 + 热重载强杀/串行化（无孤儿进程）。同时是 DSH 插件、独立 CLI 和 MCP server，纯 Node 内置模块实现。",
   "type": "module",
   "main": "./index.js",
   "exports": {
@@ -35,7 +35,7 @@
   "dsh": {
     "id": "dsh-artex-ops",
     "name": "ARTEX Ops",
-    "version": "2.3.0",
+    "version": "2.3.1",
     "repo": "portable: node install.mjs",
     "permissions": "本地 HTTP/DNS 回调监听（默认仅 127.0.0.1，端口可配）、文件写（数据目录：状态/凭据/回连日志/证据）、无出站请求",
     "bundle": {
