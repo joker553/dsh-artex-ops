@@ -5,6 +5,15 @@
 - **可移植**：纯 `node:*` 内置模块，零第三方依赖；`node install.mjs` 在任意装了 DSH 的机器上一键挂载；换 harness（任何 MCP 客户端 / 任意 shell agent）读同一份 `state.json` 接着跑。
 - **对话即测试**：`pt_next` 把「本轮该干什么」算成程序结论（不是模型自由发挥），`pt_intent claim/done` 一次一条意图，盲漏洞必须 `pt_oob_new/poll` 拿到回连，结论不够证据的调用会被工具直接拒绝。
 
+## 从 GitHub 安装
+
+```bash
+git clone https://github.com/joker553/dsh-artex-ops.git
+cd dsh-artex-ops
+node install.mjs                 # 自动探测 DSH home / profile，装包 + 挂 bundles + 写 patch + 装技能
+```
+
+改完 `lib/` 不用重启 DeepSeekRuntime：宿主外壳会重启实现子进程并按 catalog 差量重注册工具。
 ## 三种用法（同一引擎）
 
 | 形态 | 入口 | 适用 |
