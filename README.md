@@ -281,6 +281,26 @@ node test/hot-reload.mjs      # 宿主外壳：catalog 注册、调用往返、l
 | 手法记忆 | `tactics`（fingerprint → 链模板），`pt_chain_plan` 可引用模板，全链 satisfied 时沉淀 |
 | 扫描器桥接 | nuclei `-json` 输出批量灌 `pt_candidate`，再由 agent 逐条真触发 |
 
+## 提交纪律（敏感信息）
+
+仓库**只放代码**。以下内容永远不进 git：
+
+```
+state.json / state.json.*      # 任务状态（含资产、意图、凭据索引）
+secrets/  evidence/  oob/      # 凭据明文、证据、回连日志
+missions/                      # 每个任务的工作目录
+.env / *.pem / *.key           # 任何凭据文件
+*nuclei*.jsonl / *.har         # 扫描原始输出（可能含目标信息）
+```
+
+防线：
+
+- `.gitignore` 已覆盖上面全部路径；
+- **pre-commit 钩子**（`.githooks/pre-commit`，已 `git config core.hooksPath .githooks`）会扫暂存文件：GitHub/AWS/Slack/OpenAI token、私钥块、`Authorization: Bearer`、字面量口令、`Set-Cookie`、本地状态路径；命中即阻止提交并打印掩码片段；
+- 手动跑：`npm run check:secrets`；
+- 测试夹具里的假值请用 `lab` / `fake` / `example` 之类字样（扫描器会放行），或在文件头加 `secret-scan: allow-file`。
+
+**万一已经提交了**：先把该凭据**吊销/轮换**（git 历史里的 token 等于已泄露），再用 `git filter-repo` 重写历史并强推；不要只删文件了事——对象库里还留着。
 ## 许可
 
 本项目代码以 **MIT** 发布，见 [LICENSE](LICENSE)。

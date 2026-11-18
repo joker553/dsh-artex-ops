@@ -6,5 +6,15 @@ state.json.*
 secrets/
 evidence/
 oob/
+missions/
+reports/
 .DS_Store
 Thumbs.db
+.env
+.env.*
+*.pem
+*.key
+*.p12
+credentials*
+*nuclei*.jsonl
+*.har
