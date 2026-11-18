@@ -270,6 +270,17 @@ pt_nuclei action=ingest file=nuclei.jsonl          # 或 action=map 先预览
 - **CVE 类模板**只生成候选、不动矩阵（没有稳定的类目归属）；
 - 同一 (host, template) 幂等，重复跑不会堆候选；
 - 候选 ≠ 漏洞：仍需换路径独立复验，再 `pt_candidate verdict=confirmed`。
+## 3.12 业务逻辑洞：不变量驱动
+
+逻辑洞不是"发 payload"，是"验证业务规则"。流程：
+
+1. `pt_biz action=playbook domain=<行业>` 取清单（电商/SaaS/金融/社区）；
+2. `pt_biz action=model` 记下本目标的角色/实体/规则原话（从定价页、会员条款、结算流程里抄）；
+3. 挑适用的不变量 `pt_biz action=invariant items=[...]`；
+4. 用 `pt_biz action=mutate` 把真实请求变异成金额/数量/币种/重复参数/换方法/并发重放变体，逐条打；
+5. `pt_biz action=test state=violated|holds|inconclusive evidence=...`——**violated 必须有回显**。
+
+约束：`pt_next` 会把未验证的不变量推到决策里；`violated` 会自动把对应矩阵格子标 tested，所以不要为了刷覆盖乱判 violated，否则等于自己伪造证据。
 ## 4. 串行链：用断言钉住依赖
 
 真攻击链有前后依赖，别并行下发：

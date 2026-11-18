@@ -70,7 +70,7 @@ mod.apply(
 // arrives asynchronously: wait for it before asserting.
 for (let i = 0; i < 150 && tools.size < 24; i++) await new Promise((resolve) => setTimeout(resolve, 100))
 
-assert.equal(tools.size, 26, `expected 26 tools, got ${tools.size}`)
+assert.equal(tools.size, 27, `expected 27 tools, got ${tools.size}`)
 assert.equal(sections.length, 1)
 assert.equal(sections[0].name, 'tool:artex-ops')
 console.log(`apply from installed path: ${tools.size} tools, 1 prompt section (${sections[0].name})`)
@@ -91,7 +91,7 @@ assert.ok(fs.existsSync(mcp), 'MCP entry missing')
 const cliRun = spawnSync(process.execPath, [cli, 'tools', '--data', path.join(os.tmpdir(), 'artex-ops-installcheck')], { encoding: 'utf8' })
 assert.equal(cliRun.status, 0, `CLI failed: ${cliRun.stderr}`)
 const catalog = JSON.parse(cliRun.stdout)
-assert.equal(catalog.length, 26)
+assert.equal(catalog.length, 27)
 console.log(`CLI from install dir: ${catalog.length} tools listed`)
 console.log(`  first: ${catalog.slice(0, 4).map((tool) => tool.name).join(', ')} …`)
 

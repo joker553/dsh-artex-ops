@@ -43,7 +43,8 @@ for (const file of stagedFiles()) {
   } catch {
     continue
   }
-  if (content.includes('secret-scan: allow-file')) continue
+  // 豁免只对 test/ 下的夹具生效：生产代码里加这行不算数
+  if (file.startsWith('test/') && content.includes('secret-scan: allow-file')) continue
   const lines = content.split(/\r?\n/)
   lines.forEach((line, index) => {
     for (const [name, pattern] of PATTERNS) {

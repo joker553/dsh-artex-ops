@@ -1,3 +1,4 @@
+// secret-scan: allow-file —— 本文件里的 cookie/token 均为本地 fixture 合成值，非真实凭据
 // Self-test: proves the plugin works without booting the desktop app.
 //
 //   1. mounts the plugin on a fake Cordis context that captures registrations
@@ -105,8 +106,8 @@ async function main() {
 
   console.log(`\n[1] 挂载与工具面 (plugin=${pluginName}, inject=${inject.join(',')})`)
   const registry = collectRegistry(ctx)
-  assert.equal(registry.size, 26, `expected 17 tools, got ${registry.size}: ${[...registry.keys()].join(',')}`)
-  ok('注册 26 个工具', [...registry.keys()].join(', '))
+  assert.equal(registry.size, 27, `expected 17 tools, got ${registry.size}: ${[...registry.keys()].join(',')}`)
+  ok('注册 27 个工具', [...registry.keys()].join(', '))
   assert.equal(ctx.__sections.length, 1, 'one prompt section registered')
   assert.equal(ctx.__sections[0].name, 'tool:artex-ops')
   ok('注入系统提示段', ctx.__sections[0].name)
@@ -425,14 +426,14 @@ async function main() {
 
   const cliTools = spawnSync(process.execPath, [cli, 'tools', '--data', cliDir], { encoding: 'utf8' })
   assert.equal(cliTools.status, 0)
-  assert.equal(JSON.parse(cliTools.stdout).length, 26)
-  ok('CLI tools 列出 26 个工具')
+  assert.equal(JSON.parse(cliTools.stdout).length, 27)
+  ok('CLI tools 列出 27 个工具')
 
   const mcpDir = makeDataDir()
   const mcp = path.join(path.dirname(cli), 'artex-ops-mcp.mjs')
   const mcpResponses = await runMcp(mcp, mcpDir)
   assert.equal(mcpResponses.initialize.protocolVersion, '2025-06-18')
-  assert.equal(mcpResponses.list.tools.length, 26)
+  assert.equal(mcpResponses.list.tools.length, 27)
   assert.ok(mcpResponses.call.content[0].text.includes('decision'))
   ok('MCP stdio 握手 + tools/list + tools/call', mcpResponses.call.content[0].text.split('\n')[0])
 
@@ -1104,6 +1105,75 @@ async function main() {
     await ag.close()
     try {
       fs.rmSync(adir, { recursive: true, force: true })
+    } catch {}
+  }
+
+  console.log('\n[22] 业务逻辑层：不变量清单 + 变异器')
+  const bdir = makeDataDir()
+  const biz = createEngine({ dataDir: bdir })
+  try {
+    await biz.call('pt_mission', { action: 'start', goal: '业务逻辑验证', scope: ['127.0.0.1:18200'] })
+    const app = await biz.call('pt_asset', { action: 'add', assets: [{ type: 'app', name: 'http://127.0.0.1:18200', host: '127.0.0.1:18200' }] })
+
+    const domains = await biz.call('pt_biz', { action: 'playbook' })
+    assert.equal(domains.domains.length, 4)
+    const playbook = await biz.call('pt_biz', { action: 'playbook', domain: 'ecommerce' })
+    assert.equal(playbook.invariants.length, 4)
+    assert.equal(playbook.invariants[0].id, 'price-server-side')
+    ok('行业清单：4 个行业，电商 4 条不变量', playbook.name)
+
+    await biz.call('pt_biz', {
+      action: 'model',
+      domain: 'ecommerce',
+      actors: ['user', 'admin'],
+      entities: ['order', 'coupon'],
+      notes: '定价页：满 199 减 50，券不可叠加',
+    })
+    const added = await biz.call('pt_biz', { action: 'invariant', items: playbook.invariants.slice(0, 2) })
+    assert.equal(added.created.length, 2)
+    assert.equal(added.total, 2)
+    ok('业务模型 + 不变量入库', added.created.map((row) => row.id).join(','))
+
+    const next = await biz.call('pt_next', {})
+    assert.equal(next.business.invariants, 2)
+    assert.equal(next.business.open, 2)
+    assert.ok(next.actions.some((action) => action.tool === 'pt_biz'), 'pt_next 应推动未验证的不变量')
+    ok('pt_next 把业务不变量纳入决策', `open=${next.business.open}`)
+
+    await assert.rejects(
+      () => biz.call('pt_biz', { action: 'test', id: added.created[0].id, state: 'violated' }),
+      /必须给证据/,
+    )
+    ok('无证据判 violated 被拒（逻辑洞同样要证据）')
+
+    const tested = await biz.call('pt_biz', {
+      action: 'test',
+      id: added.created[0].id,
+      state: 'violated',
+      evidence: 'POST /api/v2/price {"price":0.01} → charged=0.01（服务端采信客户端金额）',
+      assetId: app.created[0].id,
+    })
+    assert.equal(tested.invariant.state, 'violated')
+    assert.equal(tested.summary.violated, 1)
+    ok('不变量被违反 → 记录证据并统计', `violated=${tested.summary.violated}`)
+
+    const cells = await biz.call('pt_coverage', { action: 'matrix', assetId: app.created[0].id, state: 'tested', limit: 20 })
+    assert.ok(cells.cells.some((cell) => cell.classId === 'price-tamper' && cell.note.includes('业务不变量')))
+    ok('违反不变量自动关联矩阵格子（price-tamper）')
+
+    const mutated = await biz.call('pt_biz', { action: 'mutate', method: 'POST', url: '/api/v2/price', body: { price: 199, quantity: 1 } })
+    assert.ok(mutated.count >= 15, `expected many variants, got ${mutated.count}`)
+    const kinds = mutated.variants.map((variant) => variant.kind)
+    assert.ok(kinds.includes('price:zero') && kinds.includes('price:negative') && kinds.includes('concurrent-replay'))
+    ok('变异器：金额/数量/换方法/并发重放', `${mutated.count} 个变体`)
+
+    const open = await biz.call('pt_biz', { action: 'invariant', stateFilter: 'open' })
+    assert.equal(open.invariants.length, 1)
+    ok('按状态过滤不变量', `open=${open.invariants.length}`)
+  } finally {
+    await biz.close()
+    try {
+      fs.rmSync(bdir, { recursive: true, force: true })
     } catch {}
   }
 

@@ -45,7 +45,7 @@ node install.mjs --uninstall                       # 卸载（保留数据目录
 
 > 插件代码改动需要宿主重启才生效（ESM 模块缓存）；只改配置/patch 由 `dsh-hmr` 热重组。首次安装时若宿主已在运行，一次重启即可。
 
-## 26 个工具
+## 27 个工具
 
 **循环骨架（ARTEX 本体）**
 
@@ -222,6 +222,25 @@ pt_mission action=prove        # 收尾时再写一次，回传 artifacts 路径
 
 `state.json` 损坏时改名为 `.corrupt-<ts>` 后重建，不会静默丢库。
 
+## 业务逻辑洞：不变量驱动（而不是 payload 驱动）
+
+注入类靠"发个畸形输入看反应"，逻辑洞靠"这条业务规则能不能被违反"。所以这一层是**清单 + 建模 + 变异**：
+
+```bash
+pt_biz action=playbook                    # 4 个行业：ecommerce / saas / finance / community
+pt_biz action=playbook domain=ecommerce   # 每条 = 不变量 + 验证配方 + 判定信号
+pt_biz action=model domain=ecommerce actors=[user,admin] entities=[order,coupon] notes="满199减50，券不可叠加"
+pt_biz action=invariant items=[...]       # 把适用条目抄进本任务（可只挑 2 条）
+pt_biz action=mutate method=POST url=/api/price body={"price":199,"quantity":1}
+pt_biz action=test id=inv-4 state=violated evidence="POST price=0.01 → charged=0.01"
+```
+
+- **`violated` 必须带证据**（命令 + 关键回显），否则只能记 `inconclusive`——逻辑洞同样不许拍脑袋；
+- 结论落库后会**自动把对应矩阵格子标 tested**（`price-tamper`/`race-condition`/`workflow-bypass`/`tenant-isolation`/`bfla`…）；
+- `pt_next` 会把"未验证的不变量"推到决策里：想收敛就必须先给它们定论；
+- `mutate` 生成 21 类变体：金额 0/负数/极小/极大/浮点噪声/字符串/科学计数、数量、重复参数、数组化、换方法、并发重放、状态后重放。
+
+行业清单是**起点**：真正值钱的规则在目标自己的定价页、会员条款、结算流程里——把它们抄进 `notes`/`invariant` 才是把"业务知识"灌进来的正确方式。
 ## 扫描器桥接（nuclei → 类型矩阵）
 
 ```bash
@@ -265,7 +284,7 @@ pt_mission prove evidence="…" && pt_mission report
 ## 自测
 
 ```bash
-node test/selftest.mjs        # 99 项：schema 校验、真实回连、链断言拒绝、意图生命周期、prove 门槛、CLI、MCP 握手、多 worker 过程交换、阶段机
+node test/selftest.mjs        # 107 项：schema 校验、真实回连、链断言拒绝、意图生命周期、prove 门槛、CLI、MCP 握手、多 worker 过程交换、阶段机
 node test/install-check.mjs   # 安装位：patch/manifest/解析/apply 25 工具 + CLI 从安装目录可执行
 node test/hot-reload.mjs      # 宿主外壳：catalog 注册、调用往返、lib 改动后重启子进程并重注册
 node test/hot-reload-stability.mjs  # 连续改动 lib/：始终只剩 1 个实现子进程、卸载后无孤儿
