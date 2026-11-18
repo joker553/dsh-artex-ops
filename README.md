@@ -199,6 +199,28 @@ MCP 侧对应环境变量：`ARTEX_OPS_HOME`、`ARTEX_OPS_OOB_PORT`、`ARTEX_OPS
 
 `state.json` 损坏时改名为 `.corrupt-<ts>` 后重建，不会静默丢库。
 
+## 本地靶场演练（5 分钟）
+
+仓库自带一个刻意留洞的靶场（无外部依赖，只监听回环）：
+
+```bash
+node test/lab-server.mjs 18200 18201     # 主站 + 仅回环可达的「内网元数据」服务
+```
+
+然后在对话里（或 CLI/MCP）走一遍：
+
+```bash
+pt_mission start goal="拿到管理员面并留证" scope=["http://127.0.0.1:18200","http://127.0.0.1:18201"]
+pt_recon action=save url=http://127.0.0.1:18200/     # 15 个隐藏接口 + 6 参数 + 4 功能点
+pt_phase set phase=sweep
+pt_coverage action=next cat=injection limit=20       # 按类目横扫…
+pt_oob_new kind=http note="命令注入带外确认"
+pt_phase set phase=deepdive
+pt_chain_plan title="上传→RCE→凭据→管理面" steps=[…]
+pt_mission prove evidence="…" && pt_mission report
+```
+
+靶场内置：默认弱口令、cookie 越权、未授权 IDOR、SQLi（错误回显+布尔）、命令注入（可 OAST）、SSRF→内网元数据、路径穿越、任意上传 + eval RCE、SSTI、价格篡改、反射 XSS、缺安全头。**它只用于本机验证，不要改配置暴露到公网。**
 ## 自测
 
 ```bash
