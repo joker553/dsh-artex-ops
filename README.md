@@ -258,6 +258,8 @@ pt_mission prove evidence="…" && pt_mission report
 ```
 
 靶场内置：默认弱口令、cookie 越权、未授权 IDOR、SQLi（错误回显+布尔）、命令注入（可 OAST）、SSRF→内网元数据、路径穿越、任意上传 + eval RCE、SSTI、价格篡改、反射 XSS、缺安全头。**它只用于本机验证，不要改配置暴露到公网。**
+`node scripts/doctor.mjs` 可一次看清：实现子进程数（**应为 1**）、数据目录、mission 数、state 概要、pre-commit 是否启用。
+
 ## 自测
 
 ```bash
