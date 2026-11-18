@@ -257,6 +257,19 @@ pt_recon action=save url=https://target.example/ js=["https://cdn.example/app.js
 - **sourcemap 优先**：`//# sourceMappingURL=` 命中就把 `.map` 拉下来，能直接还原路由与参数名（比读压缩代码高效一个数量级）。
 - **把发现接进覆盖矩阵**：`save` 会自动把该 app 的 recon 类目标 tested；新出现的 endpoint 会自动成为新的「资产 × 类型」格子，`pt_next` 会接着推。
 - 别把 JS 里的字符串当接口：命中后先用 HEAD/GET 验一次存在性，404 的用 `pt_coverage mark state=na` 记掉，别留在 `tested` 里充数。
+## 3.11 扫描器桥接：nuclei → 矩阵
+
+模板扫一遍，把"扫过的类目"变成覆盖记录，人只处理剩下的空白：
+
+```bash
+nuclei -u https://target -json -o nuclei.jsonl
+pt_nuclei action=ingest file=nuclei.jsonl          # 或 action=map 先预览
+```
+
+- 命中 → 对应「资产 × 类型」格子标 `tested`（note 写模板 id 与命中地址）+ 生成 `pt_candidate`；
+- **CVE 类模板**只生成候选、不动矩阵（没有稳定的类目归属）；
+- 同一 (host, template) 幂等，重复跑不会堆候选；
+- 候选 ≠ 漏洞：仍需换路径独立复验，再 `pt_candidate verdict=confirmed`。
 ## 4. 串行链：用断言钉住依赖
 
 真攻击链有前后依赖，别并行下发：

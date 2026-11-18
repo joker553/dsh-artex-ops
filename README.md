@@ -43,7 +43,7 @@ node install.mjs --uninstall                       # 卸载（保留数据目录
 
 > 插件代码改动需要宿主重启才生效（ESM 模块缓存）；只改配置/patch 由 `dsh-hmr` 热重组。首次安装时若宿主已在运行，一次重启即可。
 
-## 25 个工具
+## 26 个工具
 
 **循环骨架（ARTEX 本体）**
 
@@ -220,6 +220,20 @@ pt_mission action=prove        # 收尾时再写一次，回传 artifacts 路径
 
 `state.json` 损坏时改名为 `.corrupt-<ts>` 后重建，不会静默丢库。
 
+## 扫描器桥接（nuclei → 类型矩阵）
+
+```bash
+nuclei -u https://target -json -o nuclei.jsonl      # 用你熟悉的模板集
+pt_nuclei action=map    file=nuclei.jsonl          # 先看映射：哪些模板能归到 64 类
+pt_nuclei action=ingest file=nuclei.jsonl          # 落库：命中格子标 tested + 生成 candidate
+```
+
+- **映射依据**：`info.tags` 优先（sqli/xss/ssrf/xxe/ssti/lfi/cve…），其次模板 id/名称关键词；
+- **CVE 类**没有稳定的类型归属 → 只生成 candidate，不污染矩阵；
+- **幂等**：同一 (host, template) 不会重复生成候选，已 tested 的格子不重复计；
+- 命中的格子 note 里会写 `nuclei <template-id> (<severity>) @ <matched-at>`，报告可直接引用；
+- candidate 仍需独立复验才升 finding（`pt_candidate verdict=confirmed` 要证据）。
+
 ## 本地靶场演练（5 分钟）
 
 仓库自带一个刻意留洞的靶场（无外部依赖，只监听回环）：
@@ -245,7 +259,7 @@ pt_mission prove evidence="…" && pt_mission report
 ## 自测
 
 ```bash
-node test/selftest.mjs        # 90 项：schema 校验、真实回连、链断言拒绝、意图生命周期、prove 门槛、CLI、MCP 握手、多 worker 过程交换、阶段机
+node test/selftest.mjs        # 95 项：schema 校验、真实回连、链断言拒绝、意图生命周期、prove 门槛、CLI、MCP 握手、多 worker 过程交换、阶段机
 node test/install-check.mjs   # 安装位：patch/manifest/解析/apply 25 工具 + CLI 从安装目录可执行
 node test/hot-reload.mjs      # 宿主外壳：catalog 注册、调用往返、lib 改动后重启子进程并重注册
 ```

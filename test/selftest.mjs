@@ -105,8 +105,8 @@ async function main() {
 
   console.log(`\n[1] 挂载与工具面 (plugin=${pluginName}, inject=${inject.join(',')})`)
   const registry = collectRegistry(ctx)
-  assert.equal(registry.size, 25, `expected 17 tools, got ${registry.size}: ${[...registry.keys()].join(',')}`)
-  ok('注册 25 个工具', [...registry.keys()].join(', '))
+  assert.equal(registry.size, 26, `expected 17 tools, got ${registry.size}: ${[...registry.keys()].join(',')}`)
+  ok('注册 26 个工具', [...registry.keys()].join(', '))
   assert.equal(ctx.__sections.length, 1, 'one prompt section registered')
   assert.equal(ctx.__sections[0].name, 'tool:artex-ops')
   ok('注入系统提示段', ctx.__sections[0].name)
@@ -425,14 +425,14 @@ async function main() {
 
   const cliTools = spawnSync(process.execPath, [cli, 'tools', '--data', cliDir], { encoding: 'utf8' })
   assert.equal(cliTools.status, 0)
-  assert.equal(JSON.parse(cliTools.stdout).length, 25)
-  ok('CLI tools 列出 25 个工具')
+  assert.equal(JSON.parse(cliTools.stdout).length, 26)
+  ok('CLI tools 列出 26 个工具')
 
   const mcpDir = makeDataDir()
   const mcp = path.join(path.dirname(cli), 'artex-ops-mcp.mjs')
   const mcpResponses = await runMcp(mcp, mcpDir)
   assert.equal(mcpResponses.initialize.protocolVersion, '2025-06-18')
-  assert.equal(mcpResponses.list.tools.length, 25)
+  assert.equal(mcpResponses.list.tools.length, 26)
   assert.ok(mcpResponses.call.content[0].text.includes('decision'))
   ok('MCP stdio 握手 + tools/list + tools/call', mcpResponses.call.content[0].text.split('\n')[0])
 
@@ -1008,6 +1008,50 @@ async function main() {
     await ws.close()
     try {
       fs.rmSync(wdir, { recursive: true, force: true })
+    } catch {}
+  }
+
+  console.log('\n[20] nuclei 结果 → 类型矩阵（映射/落库/去重）')
+  const ndir = makeDataDir()
+  const nu = createEngine({ dataDir: ndir })
+  try {
+    await nu.call('pt_mission', { action: 'start', goal: 'nuclei 映射验证', scope: ['127.0.0.1:18200'] })
+    await nu.call('pt_asset', { action: 'add', assets: [{ type: 'app', name: 'http://127.0.0.1:18200', host: '127.0.0.1:18200' }] })
+    const jsonl = [
+      JSON.stringify({ 'template-id': 'CVE-2021-41773', info: { name: 'Apache 2.4.49 Path Traversal', severity: 'critical', tags: ['cve', 'apache'] }, host: 'http://127.0.0.1:18200', 'matched-at': 'http://127.0.0.1:18200/cgi-bin/.%2e/etc/passwd' }),
+      JSON.stringify({ 'template-id': 'sqli-error-based', info: { name: 'Error Based SQL Injection', severity: 'high', tags: ['sqli', 'injection'] }, host: 'http://127.0.0.1:18200', 'matched-at': 'http://127.0.0.1:18200/api/v2/search?q=1' }),
+      JSON.stringify({ 'template-id': 'http-missing-security-headers', info: { name: 'Missing Security Headers', severity: 'info', tags: ['misconfig'] }, host: 'http://127.0.0.1:18200' }),
+    ].join('\n')
+
+    const first = await nu.call('pt_nuclei', { action: 'ingest', json: jsonl })
+    assert.equal(first.total, 3)
+    assert.equal(first.markedCells, 2, `expected 2 cells marked, got ${first.markedCells}`)
+    assert.equal(first.candidates, 3)
+    assert.equal(first.unmapped, 1, 'CVE template has no stable class')
+    ok('nuclei 命中 → 格子 tested + candidate', `marked=${first.markedCells} candidates=${first.candidates} unmapped=${first.unmapped}`)
+
+    const mappedIds = first.mapped.map((row) => row.classId).sort()
+    assert.deepEqual(mappedIds, ['security-headers', 'sqli'])
+    ok('模板 → 类目映射正确', mappedIds.join(', '))
+
+    const second = await nu.call('pt_nuclei', { action: 'ingest', json: jsonl })
+    assert.equal(second.markedCells, 0, 'already-marked cells must not be counted again')
+    assert.equal(second.candidates, 0, 'duplicate candidates must be skipped')
+    assert.equal(second.duplicates, 3)
+    ok('重复灌入幂等（0 新格子 / 0 新候选 / 3 去重）')
+
+    const preview = await nu.call('pt_nuclei', { action: 'map', json: jsonl })
+    assert.equal(preview.total, 3)
+    assert.equal(preview.mapped.filter((row) => row.classId === '').length, 1)
+    ok('action=map 可先看映射再落库')
+
+    const cov = await nu.call('pt_coverage', { action: 'matrix', state: 'tested', limit: 10 })
+    assert.ok(cov.cells.some((cell) => cell.classId === 'sqli' && cell.note.startsWith('nuclei')))
+    ok('格子备注里带模板 id 与命中地址', 'sqli @ nuclei')
+  } finally {
+    await nu.close()
+    try {
+      fs.rmSync(ndir, { recursive: true, force: true })
     } catch {}
   }
 
