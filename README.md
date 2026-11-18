@@ -297,7 +297,7 @@ missions/                      # 每个任务的工作目录
 
 - `.gitignore` 已覆盖上面全部路径；
 - **pre-commit 钩子**（`.githooks/pre-commit`，已 `git config core.hooksPath .githooks`）会扫暂存文件：GitHub/AWS/Slack/OpenAI token、私钥块、`Authorization: Bearer`、字面量口令、`Set-Cookie`、本地状态路径；命中即阻止提交并打印掩码片段；
-- 手动跑：`npm run check:secrets`；
+- 手动跑：`npm run check:secrets`；`npm install` 时会通过 `prepare` 自动设置 `core.hooksPath`，新克隆的仓库同样生效；
 - 测试夹具里的假值请用 `lab` / `fake` / `example` 之类字样（扫描器会放行），或在文件头加 `secret-scan: allow-file`。
 
 **万一已经提交了**：先把该凭据**吊销/轮换**（git 历史里的 token 等于已泄露），再用 `git filter-repo` 重写历史并强推；不要只删文件了事——对象库里还留着。

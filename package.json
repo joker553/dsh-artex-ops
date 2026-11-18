@@ -54,7 +54,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node test/selftest.mjs",`n    "check:secrets": "node scripts/check-secrets.mjs",
+    "test": "node test/selftest.mjs",`n    "check:secrets": "node scripts/check-secrets.mjs",`n    "prepare": "git config core.hooksPath .githooks || exit 0",
     "install-plugin": "node install.mjs",
     "uninstall-plugin": "node install.mjs --uninstall",
     "cli": "node bin/artex-ops.mjs",
