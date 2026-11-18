@@ -965,6 +965,52 @@ async function main() {
     } catch {}
   }
 
+  console.log('\n[19] 每次 mission 一个独立工作目录')
+  const wdir = makeDataDir()
+  const ws = createEngine({ dataDir: wdir })
+  try {
+    const started = await ws.call('pt_mission', { action: 'start', goal: '工作目录验证', scope: ['x.test'] })
+    const workspace = started.mission.workspace
+    assert.ok(workspace?.root?.startsWith(path.resolve(wdir)), `workspace root should live under dataDir, got ${workspace?.root}`)
+    assert.equal(fs.existsSync(workspace.work), true, 'work/ should be created')
+    assert.equal(fs.existsSync(workspace.evidence), true, 'evidence/ should be created')
+    ok('mission 起步即创建 work/ 与 evidence/', path.basename(workspace.root))
+
+    const second = await ws.call('pt_mission', { action: 'start', goal: '第二个任务', scope: ['y.test'], replace: true })
+    assert.notEqual(second.mission.workspace.root, workspace.root, 'each mission gets its own directory')
+    assert.equal(fs.existsSync(workspace.root), true, 'previous mission directory is kept')
+    ok('换 mission 不覆盖旧目录', `新旧：${path.basename(workspace.root)} / ${path.basename(second.mission.workspace.root)}`)
+
+    const saved = await ws.call('pt_evidence_save', { name: 'ws-probe', content: 'GET /health -> 200', note: 'workspace 验证' })
+    assert.ok(saved.path.startsWith(second.mission.workspace.root), `evidence should land in the mission dir, got ${saved.path}`)
+    ok('证据落进本次 mission 的 evidence/', path.basename(saved.path))
+
+    const listing = await ws.call('pt_mission', { action: 'workspace' })
+    assert.equal(listing.workspace.evidenceFiles.length, 1)
+    assert.equal(listing.workspace.evidenceFiles[0].name, path.basename(saved.path))
+    ok('action=workspace 能列出产物', `evidence ${listing.workspace.evidenceFiles.length} 个`)
+
+    const report = await ws.call('pt_mission', { action: 'report' })
+    assert.ok(report.artifacts?.report?.startsWith(second.mission.workspace.root))
+    assert.equal(fs.existsSync(report.artifacts.report), true)
+    assert.equal(fs.existsSync(report.artifacts.manifest), true)
+    const manifest = JSON.parse(fs.readFileSync(report.artifacts.manifest, 'utf8'))
+    assert.equal(manifest.mission.id, second.mission.id)
+    assert.ok(Array.isArray(manifest.findings))
+    ok('report 落盘 report.md + manifest.json', path.basename(report.artifacts.report))
+
+    const goal = (await ws.call('pt_goal', { action: 'list' })).goals[0]
+    await ws.call('pt_goal', { action: 'prove', id: goal.id, evidence: '工作目录与产物验证通过（见 report.md）' })
+    const proved = await ws.call('pt_mission', { action: 'prove', evidence: 'mission 工作区验证完成，产物已落盘' })
+    assert.ok(proved.mission.artifacts?.root?.startsWith(second.mission.workspace.root))
+    ok('prove 时再次写盘并回传路径', path.basename(proved.mission.artifacts.root))
+  } finally {
+    await ws.close()
+    try {
+      fs.rmSync(wdir, { recursive: true, force: true })
+    } catch {}
+  }
+
   console.log(`\nPASS  ${results.length} 项检查全部通过 · dataDir=${dataDir}`)
   // Cleanup: dispose effects (closes the listener) and drop the temp data dir.
   for (const dispose of ctx.__effects ?? []) {

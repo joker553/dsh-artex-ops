@@ -187,6 +187,27 @@ MCP 侧对应环境变量：`ARTEX_OPS_HOME`、`ARTEX_OPS_OOB_PORT`、`ARTEX_OPS
 
 **远程目标最容易踩的坑**：默认只绑 `127.0.0.1`。没配 `bindHost/publicHost` 时，目标回连不到你，盲漏洞会被误判成"不存在"。
 
+## 每次测试的工作目录
+
+每个 mission 有自己的目录，互不覆盖：
+
+```
+<dataDir>/missions/<missionId>/
+├── work/                  # 脚本、payload、抓包等中间产物（agent 写这里）
+├── evidence/              # pt_evidence_save 落盘（sha256 记在 state.json 索引里）
+├── report.md              # pt_mission report / prove 生成
+└── manifest.json          # 任务快照：目标/范围/漏洞/覆盖/证据清单/链
+```
+
+相关动作：
+
+```bash
+pt_mission action=workspace    # 看路径 + work/、evidence/ 里的文件
+pt_mission action=report       # 生成 report.md 并写 manifest.json
+pt_mission action=prove        # 收尾时再写一次，回传 artifacts 路径
+```
+
+`pt_state` 与 `pt_mission action=state` 都会带上 `workspace` 字段。多个测试互不污染，整包可直接交给客户复现或归档。
 ## 数据布局
 
 ```
@@ -224,7 +245,7 @@ pt_mission prove evidence="…" && pt_mission report
 ## 自测
 
 ```bash
-node test/selftest.mjs        # 84 项：schema 校验、真实回连、链断言拒绝、意图生命周期、prove 门槛、CLI、MCP 握手、多 worker 过程交换、阶段机
+node test/selftest.mjs        # 90 项：schema 校验、真实回连、链断言拒绝、意图生命周期、prove 门槛、CLI、MCP 握手、多 worker 过程交换、阶段机
 node test/install-check.mjs   # 安装位：patch/manifest/解析/apply 25 工具 + CLI 从安装目录可执行
 node test/hot-reload.mjs      # 宿主外壳：catalog 注册、调用往返、lib 改动后重启子进程并重注册
 ```
